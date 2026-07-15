@@ -9,6 +9,8 @@ Ce script :
 3. Calcule des statistiques DESCRIPTIVES sur l'historique passé :
    - fréquence d'apparition de chaque numéro (1-49) et numéro chance (1-10)
    - écart (nombre de tirages) depuis la dernière sortie de chaque numéro
+   - top 5 des numéros les plus sortis : sur tout l'historique, le dernier
+     an, le dernier trimestre, le dernier mois
 4. Écrit tout ça dans data/loto-stats.json, lu ensuite par la page du site.
 
 IMPORTANT : ce script ne calcule et n'affiche AUCUNE "probabilité de sortie
@@ -21,7 +23,7 @@ import io
 import json
 import sys
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.request import urlopen, Request
 
 # URL officielle FDJ (archive Loto, novembre 2019 -> aujourd'hui).
@@ -34,6 +36,8 @@ FDJ_ARCHIVE_URL = (
 )
 
 OUTPUT_PATH = "data/loto-stats.json"
+
+DATE_FORMATS = ("%d/%m/%Y", "%Y-%m-%d", "%Y%m%d", "%d-%m-%Y")
 
 
 def download_archive(url: str) -> bytes:
@@ -48,7 +52,6 @@ def extract_csv_text(zip_bytes: bytes) -> str:
         if not csv_names:
             raise RuntimeError("Aucun fichier CSV trouvé dans l'archive ZIP.")
         raw = zf.read(csv_names[0])
-    # Les fichiers FDJ sont généralement encodés en latin-1 / cp1252.
     for encoding in ("utf-8-sig", "cp1252", "latin-1"):
         try:
             return raw.decode(encoding)
@@ -62,6 +65,18 @@ def detect_delimiter(sample: str) -> str:
     return ";" if first_line.count(";") >= first_line.count(",") else ","
 
 
+def parse_date(raw: str):
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def parse_draws(csv_text: str):
     delimiter = detect_delimiter(csv_text)
     reader = csv.DictReader(io.StringIO(csv_text), delimiter=delimiter)
@@ -69,7 +84,7 @@ def parse_draws(csv_text: str):
 
     main_cols = [f for f in fieldnames if f and "boule" in f.lower() and "chance" not in f.lower()]
     chance_cols = [f for f in fieldnames if f and "chance" in f.lower()]
-    date_cols = [f for f in fieldnames if f and "date" in f.lower()]
+    date_cols = [f for f in fieldnames if f and "date" in f.lower() and "forclusion" not in f.lower()]
     date_col = date_cols[0] if date_cols else None
 
     draws = []
@@ -89,12 +104,31 @@ def parse_draws(csv_text: str):
                     chance = c
             except (ValueError, TypeError):
                 pass
+        date_obj = parse_date(row.get(date_col, "")) if date_col else None
         draws.append({
-            "date": row.get(date_col, "") if date_col else "",
+            "date_raw": row.get(date_col, "") if date_col else "",
+            "date_obj": date_obj,
             "numbers": sorted(nums[:5]),
             "chance": chance,
         })
     return draws
+
+
+def top5_for_window(draws, cutoff_date):
+    """Fréquence des numéros pour les tirages dont la date >= cutoff_date.
+    Si cutoff_date est None, prend tout l'historique."""
+    freq = {}
+    count = 0
+    for d in draws:
+        if cutoff_date is not None:
+            if d["date_obj"] is None or d["date_obj"] < cutoff_date:
+                continue
+        count += 1
+        for n in d["numbers"]:
+            freq[n] = freq.get(n, 0) + 1
+    ranked = sorted(freq.items(), key=lambda kv: kv[1], reverse=True)
+    top5 = [{"number": n, "count": c} for n, c in ranked[:5]]
+    return top5, count
 
 
 def compute_stats(draws):
@@ -109,8 +143,6 @@ def compute_stats(draws):
             freq_chance[d["chance"]] += 1
 
     # Écart depuis la dernière sortie (0 = sorti au dernier tirage connu).
-    # On suppose que draws est trié chronologiquement (ordre du fichier FDJ,
-    # du plus ancien au plus récent).
     gap_main = {n: None for n in range(1, 50)}
     for idx in range(len(draws) - 1, -1, -1):
         for n in draws[idx]["numbers"]:
@@ -132,14 +164,44 @@ def compute_stats(draws):
     total = len(draws)
     last_draw = draws[-1] if draws else None
 
+    # Dernière date connue (référence pour les fenêtres temporelles).
+    dated = [d["date_obj"] for d in draws if d["date_obj"] is not None]
+    reference_date = max(dated) if dated else None
+
+    top5_all_time, n_all = top5_for_window(draws, None)
+
+    if reference_date is not None:
+        top5_month, n_month = top5_for_window(draws, reference_date - timedelta(days=31))
+        top5_quarter, n_quarter = top5_for_window(draws, reference_date - timedelta(days=92))
+        top5_year, n_year = top5_for_window(draws, reference_date - timedelta(days=366))
+        dates_reliable = True
+    else:
+        # Repli si aucune date n'a pu être lue : approximation par nombre de
+        # tirages (Loto = ~3 tirages/semaine -> ~13/mois, ~39/trimestre, ~156/an).
+        top5_month, n_month = top5_for_window(draws[-13:], None)
+        top5_quarter, n_quarter = top5_for_window(draws[-39:], None)
+        top5_year, n_year = top5_for_window(draws[-156:], None)
+        dates_reliable = False
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "total_draws_analyzed": total,
-        "last_draw": last_draw,
+        "last_draw": {
+            "date": last_draw["date_raw"] if last_draw else None,
+            "numbers": last_draw["numbers"] if last_draw else None,
+            "chance": last_draw["chance"] if last_draw else None,
+        } if last_draw else None,
         "frequency_main": freq_main,
         "frequency_chance": freq_chance,
         "gap_since_last_seen_main": gap_main,
         "gap_since_last_seen_chance": gap_chance,
+        "top5": {
+            "dates_reliable": dates_reliable,
+            "all_time": {"draws_counted": n_all, "top5": top5_all_time},
+            "last_year": {"draws_counted": n_year, "top5": top5_year},
+            "last_quarter": {"draws_counted": n_quarter, "top5": top5_quarter},
+            "last_month": {"draws_counted": n_month, "top5": top5_month},
+        },
         "disclaimer": (
             "Statistiques descriptives sur l'historique passe des tirages. "
             "Le Loto est un jeu de hasard : chaque tirage est independant et "
