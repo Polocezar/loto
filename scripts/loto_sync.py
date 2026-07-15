@@ -39,6 +39,19 @@ OUTPUT_PATH = "data/loto-stats.json"
 
 DATE_FORMATS = ("%d/%m/%Y", "%Y-%m-%d", "%Y%m%d", "%d-%m-%Y")
 
+RECENT_DRAWS_KEPT = 60
+
+
+def parse_amount(raw: str):
+    raw = (raw or "").strip().replace(" ", "").replace("\u202f", "")
+    if not raw:
+        return None
+    raw = raw.replace(",", ".")
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
 
 def download_archive(url: str) -> bytes:
     req = Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; ALCF-loto-sync/1.0)"})
@@ -77,15 +90,26 @@ def parse_date(raw: str):
     return None
 
 
+import re
+
 def parse_draws(csv_text: str):
     delimiter = detect_delimiter(csv_text)
     reader = csv.DictReader(io.StringIO(csv_text), delimiter=delimiter)
     fieldnames = reader.fieldnames or []
 
     main_cols = [f for f in fieldnames if f and "boule" in f.lower() and "chance" not in f.lower()]
-    chance_cols = [f for f in fieldnames if f and "chance" in f.lower()]
+    chance_cols = [f for f in fieldnames if f and "chance" in f.lower() and "gagnant" not in f.lower() and "rapport" not in f.lower()]
     date_cols = [f for f in fieldnames if f and "date" in f.lower() and "forclusion" not in f.lower()]
     date_col = date_cols[0] if date_cols else None
+
+    # Colonnes de gains par rang, ex: "rapport_du_rang1", "rapport_du_rang2"...
+    rank_prize_cols = {}
+    for f in fieldnames:
+        if not f:
+            continue
+        m = re.search(r"rapport.*rang.?(\d)", f, re.IGNORECASE)
+        if m:
+            rank_prize_cols[int(m.group(1))] = f
 
     draws = []
     for row in reader:
@@ -105,11 +129,19 @@ def parse_draws(csv_text: str):
             except (ValueError, TypeError):
                 pass
         date_obj = parse_date(row.get(date_col, "")) if date_col else None
+
+        prizes = {}
+        for rank, col in rank_prize_cols.items():
+            amount = parse_amount(row.get(col, ""))
+            if amount is not None:
+                prizes[rank] = amount
+
         draws.append({
             "date_raw": row.get(date_col, "") if date_col else "",
             "date_obj": date_obj,
             "numbers": sorted(nums[:5]),
             "chance": chance,
+            "prizes": prizes,
         })
     return draws
 
@@ -183,6 +215,16 @@ def compute_stats(draws):
         top5_year, n_year = top5_for_window(draws[-156:], None)
         dates_reliable = False
 
+    recent_draws = []
+    for d in draws[-RECENT_DRAWS_KEPT:]:
+        recent_draws.append({
+            "date": d["date_raw"],
+            "date_iso": d["date_obj"].strftime("%Y-%m-%d") if d["date_obj"] else None,
+            "numbers": d["numbers"],
+            "chance": d["chance"],
+            "prizes": {str(k): v for k, v in d["prizes"].items()},
+        })
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "total_draws_analyzed": total,
@@ -195,6 +237,7 @@ def compute_stats(draws):
         "frequency_chance": freq_chance,
         "gap_since_last_seen_main": gap_main,
         "gap_since_last_seen_chance": gap_chance,
+        "recent_draws": recent_draws,
         "top5": {
             "dates_reliable": dates_reliable,
             "all_time": {"draws_counted": n_all, "top5": top5_all_time},
