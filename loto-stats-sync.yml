@@ -1,0 +1,37 @@
+name: Synchronisation statistiques Loto
+
+on:
+  schedule:
+    # Tous les dimanches à 22h UTC (~ minuit heure de Paris en été)
+    - cron: '0 22 * * 0'
+  workflow_dispatch: {}   # permet de le lancer manuellement depuis l'onglet Actions
+
+permissions:
+  contents: write
+
+jobs:
+  sync-loto-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Lancer le script de synchronisation
+        run: python scripts/loto_sync.py
+
+      - name: Commit et push si le fichier a changé
+        run: |
+          git config user.name "loto-sync-bot"
+          git config user.email "actions@github.com"
+          git add data/loto-stats.json
+          if git diff --cached --quiet; then
+            echo "Aucun changement à commit."
+          else
+            git commit -m "Mise à jour automatique des statistiques Loto"
+            git push
+          fi
