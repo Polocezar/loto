@@ -46,6 +46,17 @@
   }
   #tabs button.active{ background:var(--violet-dark); border-color:var(--violet-dark); color:#fff; }
   .hidden{ display:none; }
+  .top5-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; }
+  .top5-block{ background:rgba(138,111,232,0.10); border-radius:10px; padding:14px 16px; }
+  .top5-block .period{ font-size:12px; color:var(--sub); margin-bottom:2px; }
+  .top5-block .count{ font-size:11px; color:var(--sub); margin-bottom:10px; }
+  .top5-badges{ display:flex; flex-wrap:wrap; gap:6px; }
+  .top5-num{
+    display:inline-flex; flex-direction:column; align-items:center; justify-content:center;
+    width:40px; height:40px; border-radius:8px; background:var(--violet-dark); color:#fff;
+  }
+  .top5-num .n{ font-size:14px; font-weight:600; line-height:1; }
+  .top5-num .c{ font-size:9px; opacity:.8; margin-top:2px; }
 </style>
 </head>
 <body>
@@ -61,6 +72,12 @@
       <div class="metric"><div class="label">Numéro le plus sorti</div><div class="value" id="mTop">-</div></div>
       <div class="metric"><div class="label">Numéro le moins sorti</div><div class="value" id="mBottom">-</div></div>
       <div class="metric"><div class="label">Chance le plus sorti</div><div class="value" id="mTopChance">-</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Top 5 des numéros les plus sortis</h2>
+      <div class="top5-grid" id="top5Grid"></div>
+      <p class="disclaimer" id="top5Note" style="margin-top:14px;"></p>
     </div>
 
     <div id="tabs">
@@ -142,6 +159,8 @@ function renderStats(stats){
   chanceEntries.sort((a,b) => b[1]-a[1]);
   document.getElementById('mTopChance').textContent = chanceEntries[0][0];
 
+  if (stats.top5) renderTop5(stats.top5);
+
   const labels = Array.from({length:49}, (_,i) => i+1);
   const data = labels.map(n => freqMain[n]);
 
@@ -193,6 +212,38 @@ function renderStats(stats){
     tr.innerHTML = `<td><span class="num-badge">${num}</span></td><td>${gap}</td><td>${count}</td>`;
     gapBody.appendChild(tr);
   });
+}
+
+function renderTop5(top5){
+  const periods = [
+    { key: 'last_month',   label: 'Dernier mois' },
+    { key: 'last_quarter', label: 'Dernier trimestre' },
+    { key: 'last_year',    label: 'Dernière année' },
+    { key: 'all_time',     label: 'Depuis le début des stats' },
+  ];
+
+  const grid = document.getElementById('top5Grid');
+  grid.innerHTML = '';
+
+  periods.forEach(p => {
+    const block = top5[p.key];
+    if (!block) return;
+    const div = document.createElement('div');
+    div.className = 'top5-block';
+    const badges = block.top5.map(item =>
+      `<div class="top5-num"><span class="n">${item.number}</span><span class="c">${item.count}x</span></div>`
+    ).join('');
+    div.innerHTML =
+      `<div class="period">${p.label}</div>` +
+      `<div class="count">${block.draws_counted} tirage(s)</div>` +
+      `<div class="top5-badges">${badges}</div>`;
+    grid.appendChild(div);
+  });
+
+  const note = document.getElementById('top5Note');
+  note.textContent = top5.dates_reliable
+    ? 'Basé sur les dates réelles des tirages. Rappel : ce classement porte sur le passé, il ne présage en rien des prochains tirages.'
+    : 'Dates non disponibles dans le fichier source : ces périodes sont approximées par nombre de tirages (~13/mois, ~39/trimestre, ~156/an). Rappel : ce classement porte sur le passé, il ne présage en rien des prochains tirages.';
 }
 
 document.getElementById('tabFreq').addEventListener('click', () => {
