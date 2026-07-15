@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Statistiques Loto - ALCF Basket</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root{
+    --bg:#1b1330; --card:#241a3d; --border:#3a2b5c; --text:#f1eefc; --sub:#b3a6d9;
+    --violet:#8a6fe8; --violet-dark:#6249c4; --gold:#e0a94d;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg); color:var(--text); padding:24px;
+  }
+  .wrap{max-width:900px; margin:0 auto;}
+  h1{font-size:22px; font-weight:500; margin:0 0 4px;}
+  .subtitle{color:var(--sub); font-size:14px; margin:0 0 24px;}
+  .card{
+    background:var(--card); border:0.5px solid var(--border); border-radius:12px;
+    padding:20px 24px; margin-bottom:20px;
+  }
+  .stats-row{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:20px; }
+  .metric{ background:rgba(138,111,232,0.12); border-radius:10px; padding:14px 16px; }
+  .metric .label{ font-size:12px; color:var(--sub); margin-bottom:4px; }
+  .metric .value{ font-size:22px; font-weight:500; color:var(--violet); }
+  h2{ font-size:16px; font-weight:500; margin:0 0 12px; }
+  .chart-wrap{ position:relative; height:280px; margin-bottom:8px; }
+  .chart-wrap.small{ height:220px; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th, td{ text-align:left; padding:6px 8px; border-bottom:0.5px solid var(--border); }
+  th{ color:var(--sub); font-weight:500; }
+  .num-badge{
+    display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px;
+    border-radius:50%; background:rgba(138,111,232,0.18); color:var(--violet);
+    font-size:12px; font-weight:500; margin-right:4px;
+  }
+  .disclaimer{ font-size:12px; color:var(--sub); line-height:1.6; }
+  .updated{ font-size:12px; color:var(--sub); margin-top:-8px; margin-bottom:20px; }
+  .error{ color:#e0847d; font-size:14px; }
+  #tabs{ display:flex; gap:8px; margin-bottom:16px; }
+  #tabs button{
+    background:transparent; border:0.5px solid var(--border); border-radius:8px;
+    padding:8px 16px; font-size:14px; cursor:pointer; color:var(--text);
+  }
+  #tabs button.active{ background:var(--violet-dark); border-color:var(--violet-dark); color:#fff; }
+  .hidden{ display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Statistiques Loto</h1>
+  <p class="subtitle">Fréquences historiques calculées automatiquement chaque semaine à partir des données officielles FDJ.</p>
+  <div class="updated" id="updated"></div>
+
+  <div id="loading" class="card">Chargement des statistiques…</div>
+  <div id="content" class="hidden">
+    <div class="stats-row">
+      <div class="metric"><div class="label">Tirages analysés</div><div class="value" id="mCount">-</div></div>
+      <div class="metric"><div class="label">Numéro le plus sorti</div><div class="value" id="mTop">-</div></div>
+      <div class="metric"><div class="label">Numéro le moins sorti</div><div class="value" id="mBottom">-</div></div>
+      <div class="metric"><div class="label">Chance le plus sorti</div><div class="value" id="mTopChance">-</div></div>
+    </div>
+
+    <div id="tabs">
+      <button id="tabFreq" class="active">Fréquence</button>
+      <button id="tabEcarts">Écarts</button>
+    </div>
+
+    <div id="panelFreq" class="card">
+      <h2>Fréquence des numéros (1-49)</h2>
+      <div class="chart-wrap"><canvas id="chartMain" role="img" aria-label="Fréquence d'apparition de chaque numéro de 1 à 49"></canvas></div>
+    </div>
+
+    <div id="panelFreq2" class="card">
+      <h2>Fréquence du numéro chance (1-10)</h2>
+      <div class="chart-wrap small"><canvas id="chartChance" role="img" aria-label="Fréquence d'apparition de chaque numéro chance de 1 à 10"></canvas></div>
+    </div>
+
+    <div id="panelEcarts" class="card hidden">
+      <h2>Écart depuis la dernière sortie (numéros les plus en retard en premier)</h2>
+      <table>
+        <thead><tr><th>Numéro</th><th>Sorti il y a (tirages)</th><th>Nb sorties totales</th></tr></thead>
+        <tbody id="gapTable"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Classement complet</h2>
+      <table>
+        <thead><tr><th>Rang</th><th>Numéro</th><th>Nb sorties</th><th>% des tirages</th></tr></thead>
+        <tbody id="rankTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="disclaimer">
+      Rappel : chaque tirage du Loto est un évènement indépendant et équiprobable. La fréquence
+      historique d'un numéro n'influence en rien ses chances de sortie au prochain tirage. Ces
+      statistiques portent uniquement sur l'historique passé, à titre informatif.
+    </p>
+  </div>
+</div>
+
+<script>
+let chartMain = null, chartChance = null;
+
+fetch('./data/loto-stats.json')
+  .then(r => {
+    if (!r.ok) throw new Error('Fichier de statistiques introuvable.');
+    return r.json();
+  })
+  .then(renderStats)
+  .catch(err => {
+    document.getElementById('loading').innerHTML =
+      '<p class="error">Impossible de charger les statistiques (' + err.message + '). ' +
+      'Le robot de synchronisation hebdomadaire n\'a peut-être pas encore été exécuté.</p>';
+  });
+
+function renderStats(stats){
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('content').classList.remove('hidden');
+
+  const genDate = new Date(stats.generated_at);
+  document.getElementById('updated').textContent =
+    'Dernière mise à jour : ' + genDate.toLocaleString('fr-FR');
+
+  const freqMain = stats.frequency_main;
+  const freqChance = stats.frequency_chance;
+  const total = stats.total_draws_analyzed;
+
+  const mainEntries = Object.entries(freqMain).map(([k,v]) => [parseInt(k), v]);
+  mainEntries.sort((a,b) => b[1]-a[1]);
+
+  document.getElementById('mCount').textContent = total;
+  document.getElementById('mTop').textContent = mainEntries[0][0];
+  document.getElementById('mBottom').textContent = mainEntries[mainEntries.length-1][0];
+
+  const chanceEntries = Object.entries(freqChance).map(([k,v]) => [parseInt(k), v]);
+  chanceEntries.sort((a,b) => b[1]-a[1]);
+  document.getElementById('mTopChance').textContent = chanceEntries[0][0];
+
+  const labels = Array.from({length:49}, (_,i) => i+1);
+  const data = labels.map(n => freqMain[n]);
+
+  chartMain = new Chart(document.getElementById('chartMain'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Sorties', data, backgroundColor: '#8a6fe8', borderRadius: 3 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { autoSkip: true, maxTicksLimit: 25, color: '#b3a6d9' }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { precision: 0, color: '#b3a6d9' }, grid: { color: '#3a2b5c' } }
+      }
+    }
+  });
+
+  const chanceLabels = Array.from({length:10}, (_,i) => i+1);
+  const chanceData = chanceLabels.map(n => freqChance[n]);
+  chartChance = new Chart(document.getElementById('chartChance'), {
+    type: 'bar',
+    data: { labels: chanceLabels, datasets: [{ label: 'Sorties', data: chanceData, backgroundColor: '#e0a94d', borderRadius: 3 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#b3a6d9' } },
+        y: { beginAtZero: true, ticks: { precision: 0, color: '#b3a6d9' }, grid: { color: '#3a2b5c' } }
+      }
+    }
+  });
+
+  const rankBody = document.getElementById('rankTable');
+  rankBody.innerHTML = '';
+  mainEntries.forEach(([num, count], idx) => {
+    const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${idx+1}</td><td><span class="num-badge">${num}</span></td><td>${count}</td><td>${pct}%</td>`;
+    rankBody.appendChild(tr);
+  });
+
+  const gapMain = stats.gap_since_last_seen_main;
+  const gapEntries = Object.entries(gapMain).map(([k,v]) => [parseInt(k), v, freqMain[k]]);
+  gapEntries.sort((a,b) => b[1]-a[1]);
+
+  const gapBody = document.getElementById('gapTable');
+  gapBody.innerHTML = '';
+  gapEntries.forEach(([num, gap, count]) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><span class="num-badge">${num}</span></td><td>${gap}</td><td>${count}</td>`;
+    gapBody.appendChild(tr);
+  });
+}
+
+document.getElementById('tabFreq').addEventListener('click', () => {
+  document.getElementById('tabFreq').classList.add('active');
+  document.getElementById('tabEcarts').classList.remove('active');
+  document.getElementById('panelFreq').classList.remove('hidden');
+  document.getElementById('panelFreq2').classList.remove('hidden');
+  document.getElementById('panelEcarts').classList.add('hidden');
+});
+document.getElementById('tabEcarts').addEventListener('click', () => {
+  document.getElementById('tabEcarts').classList.add('active');
+  document.getElementById('tabFreq').classList.remove('active');
+  document.getElementById('panelFreq').classList.add('hidden');
+  document.getElementById('panelFreq2').classList.add('hidden');
+  document.getElementById('panelEcarts').classList.remove('hidden');
+});
+</script>
+</body>
+</html>
