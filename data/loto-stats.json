@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-15T06:18:22.470077+00:00",
+  "generated_at": "2026-07-15T06:29:10.077935+00:00",
   "total_draws_analyzed": 1047,
   "last_draw": {
     "date": "06/11/2019",
@@ -137,6 +137,109 @@
     "8": 8,
     "9": 4,
     "10": 0
+  },
+  "top5": {
+    "dates_reliable": true,
+    "all_time": {
+      "draws_counted": 1047,
+      "top5": [
+        {
+          "number": 31,
+          "count": 130
+        },
+        {
+          "number": 30,
+          "count": 123
+        },
+        {
+          "number": 24,
+          "count": 119
+        },
+        {
+          "number": 3,
+          "count": 118
+        },
+        {
+          "number": 15,
+          "count": 118
+        }
+      ]
+    },
+    "last_year": {
+      "draws_counted": 158,
+      "top5": [
+        {
+          "number": 30,
+          "count": 26
+        },
+        {
+          "number": 31,
+          "count": 25
+        },
+        {
+          "number": 10,
+          "count": 24
+        },
+        {
+          "number": 5,
+          "count": 22
+        },
+        {
+          "number": 29,
+          "count": 22
+        }
+      ]
+    },
+    "last_quarter": {
+      "draws_counted": 40,
+      "top5": [
+        {
+          "number": 31,
+          "count": 9
+        },
+        {
+          "number": 18,
+          "count": 8
+        },
+        {
+          "number": 41,
+          "count": 8
+        },
+        {
+          "number": 30,
+          "count": 8
+        },
+        {
+          "number": 16,
+          "count": 7
+        }
+      ]
+    },
+    "last_month": {
+      "draws_counted": 14,
+      "top5": [
+        {
+          "number": 31,
+          "count": 5
+        },
+        {
+          "number": 29,
+          "count": 4
+        },
+        {
+          "number": 16,
+          "count": 4
+        },
+        {
+          "number": 41,
+          "count": 4
+        },
+        {
+          "number": 18,
+          "count": 3
+        }
+      ]
+    }
   },
   "disclaimer": "Statistiques descriptives sur l'historique passe des tirages. Le Loto est un jeu de hasard : chaque tirage est independant et equiprobable. Ces chiffres ne predisent en rien les tirages a venir."
 }
