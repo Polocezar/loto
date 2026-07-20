@@ -2,8 +2,8 @@ name: Synchronisation statistiques Loto
 
 on:
   schedule:
-    # Tous les dimanches à 22h UTC (~ minuit heure de Paris en été)
-    - cron: '0 22 * * 0'
+     # Tous les jours à 5h UTC (~7h heure de Paris en été, ~6h en hiver)
+   - cron: '0 5 * * *'
   workflow_dispatch: {}   # permet de le lancer manuellement depuis l'onglet Actions
 
 permissions:
