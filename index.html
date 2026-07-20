@@ -491,15 +491,19 @@ function computeRank(matched, chanceMatch){
 
 function checkPicksAgainstDraws(picks, recentDraws){
   const dated = recentDraws
-    .map(d => ({ ...d, dateObj: d.date_iso ? new Date(d.date_iso) : null }))
+    .map(d => ({ ...d, dateObj: d.date_iso ? new Date(d.date_iso + 'T00:00:00Z') : null }))
     .filter(d => d.dateObj)
     .sort((a,b) => a.dateObj - b.dateObj);
 
   let changed = false;
   picks.forEach(pick => {
     if (pick.status !== 'pending') return;
-    const createdDate = new Date(pick.createdAt);
-    const nextDraw = dated.find(d => d.dateObj > createdDate);
+    // On compare par JOUR (pas par heure exacte) : un tirage a lieu le soir,
+    // donc un tirage du même jour que le pronostic (joué dans la journée)
+    // compte comme "à venir" pour ce pronostic.
+    const createdDay = new Date(pick.createdAt);
+    createdDay.setUTCHours(0, 0, 0, 0);
+    const nextDraw = dated.find(d => d.dateObj >= createdDay);
     if (!nextDraw) return;
 
     const matched = pick.numbers.filter(n => nextDraw.numbers.includes(n)).length;
