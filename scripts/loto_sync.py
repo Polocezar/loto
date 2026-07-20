@@ -268,6 +268,17 @@ def main():
         print("Aucun tirage valide extrait du CSV.", file=sys.stderr)
         sys.exit(1)
 
+    # IMPORTANT : on ne peut pas supposer que le fichier FDJ est trié par
+    # date croissante. On trie nous-mêmes pour être sûr que draws[-1] est
+    # bien le tirage le plus récent.
+    draws_with_date = [d for d in draws if d["date_obj"] is not None]
+    draws_without_date = [d for d in draws if d["date_obj"] is None]
+    draws_with_date.sort(key=lambda d: d["date_obj"])
+    draws = draws_with_date + draws_without_date
+
+    if draws_without_date:
+        print(f"Attention : {len(draws_without_date)} tirage(s) sans date valide, placés en fin de liste.")
+
     stats = compute_stats(draws)
 
     import os
