@@ -186,6 +186,16 @@
     </div>
 
     <div class="card">
+      <h2>Bilan</h2>
+      <div class="stats-row" style="margin-bottom:0;">
+        <div class="metric"><div class="label">Mise totale</div><div class="value" id="bilanMise">-</div></div>
+        <div class="metric"><div class="label">Gains totaux</div><div class="value" id="bilanGains">-</div></div>
+        <div class="metric"><div class="label">Différence</div><div class="value" id="bilanDiff">-</div></div>
+      </div>
+      <p class="disclaimer" style="margin-top:12px;">Basé sur le prix d'une grille simple (2,20 €) et sur les pronostics conservés dans l'historique ci-dessous (les 20 derniers).</p>
+    </div>
+
+    <div class="card">
       <h2>En attente du prochain tirage</h2>
       <div id="pendingList"></div>
     </div>
@@ -571,6 +581,19 @@ function formatDate(iso){
 
 function renderGame(){
   const picks = loadPicks();
+  const GRID_PRICE = 2.20;
+
+  const mise = picks.length * GRID_PRICE;
+  const gains = picks
+    .filter(p => p.status === 'resolved' && p.result.rank && p.result.gain !== null && p.result.gain !== undefined)
+    .reduce((sum, p) => sum + p.result.gain, 0);
+  const diff = gains - mise;
+
+  document.getElementById('bilanMise').textContent = mise.toFixed(2) + ' €';
+  document.getElementById('bilanGains').textContent = gains.toFixed(2) + ' €';
+  const diffEl = document.getElementById('bilanDiff');
+  diffEl.textContent = (diff >= 0 ? '+' : '') + diff.toFixed(2) + ' €';
+  diffEl.style.color = diff >= 0 ? 'var(--green)' : 'var(--red)';
 
   const pending = picks.filter(p => p.status === 'pending');
   const pendingEl = document.getElementById('pendingList');
